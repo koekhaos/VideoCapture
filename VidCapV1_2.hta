@@ -1,0 +1,427 @@
+<head>
+<title>VLC Automatic Video Capture</title>
+<HTA:APPLICATION 
+     APPLICATIONNAME="VLC Automatic Video Capture"
+     SCROLL="no"
+     SINGLEINSTANCE="yes"
+     MinimizeButton="no"
+     MaximizeButton="no"
+     Border="thin"
+     SysMenu="no"
+>
+
+<style type="text/css">
+* {
+	font: 'arial';
+	background-color: #C0C0C0;
+}
+
+input {
+	background-color: #E4E4E4;
+}
+
+.button {   
+  color:#050;   
+  font: bold 84% 'trebuchet ms',helvetica,sans-serif;   
+  background-color:#fed;   
+  border:1px solid;   
+  border-color: #696 #363 #363 #696;
+  width: 75px;  
+}
+
+.main {
+	display: block;
+}
+
+.settings {
+	display: none;
+}
+
+.text_short {
+	width: 25px;
+}
+
+.text_med {
+	width: 75px;
+}
+
+.text_long {
+	width: 400px;
+}
+
+.red {
+	color: #FF0000;
+}
+
+.green {
+	color: #009F00;
+}
+
+.blue {
+	color: #0000FF;
+}
+
+.srcright 
+{
+    position: absolute;
+    left: 100px;
+}
+
+.note
+{
+    font-size: 60%;
+}
+</style>
+
+</head>
+
+<script language="VBScript">
+' -ON LOAD-
+Sub Window_onLoad
+    window.resizeTo 440,700
+    InitVidCap
+End Sub
+
+' -GLOBALS-
+Dim timeExecuteVidCap
+Dim timeRunVidCap
+Dim strStartTimer
+Dim strEndTimer
+Dim strTimer
+Dim arrSettings
+Dim strSourceName, strSourceIP, strSourcePort, strStartHr, strStartMn, strStopHr, strStopMn, strIncrHr, strIncrMn, strRetention, strTarget
+Const ForWriting = 2
+Const ForReading = 1
+Dim objFSO, sFile, objFile, sText
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+sFile = GetDirectory() & "\VidCap.cfg"
+
+' -SUBROUTINES-
+Sub DeleteOldVidCap
+    If strTarget = "None" Or strTarget = "" Then
+    Else
+        Set objFolder = objFSO.GetFolder(strTarget)
+        Set colFiles = objFolder.Files
+    
+        For Each objFile In colFiles
+            If CInt(DateDiff("d",objFile.DateCreated,Now)) > CInt(strRetention) And objFSO.GetExtensionName(objFile) = "mpg" Then
+                fileDelete = objFile.Path
+                objFSO.DeleteFile(fileDelete)
+            End If
+        Next
+    End If
+End Sub
+
+Sub ApplyVarVidCap
+    strSourceName = arrSettings(0)
+    strSourceIP = arrSettings(1)
+    strSourcePort = arrSettings(2)
+    strStartHr = arrSettings(3)
+    strStartMn = arrSettings(4)
+    strStopHr = arrSettings(5)
+    strStopMn = arrSettings(6)
+    strIncrHr = arrSettings(7)
+    strIncrMn = arrSettings(8)
+    strRetention = arrSettings(9)
+    strTarget = arrSettings(10)
+End Sub
+
+Sub ReadVidCap
+	Set objFile = objFSO.OpenTextFile(sFile, ForReading)
+	Do Until objFile.AtEndOfStream
+		sText = objFile.ReadLine
+		arrSettings = Split(sText, ",")
+	Loop
+    ApplyVarVidCap
+    document.getElementByID("sourcenm_text").value = strSourceName
+    document.getElementByID("sourceip_text").value = strSourceIP
+    document.getElementByID("sourcept_text").value = strSourcePort
+	document.getElementByID("starthr_text").value = strStartHr
+	document.getElementByID("startmn_text").value = strStartMn
+	document.getElementByID("stophr_text").value = strStopHr
+	document.getElementByID("stopmn_text").value = strStopMn
+	document.getElementByID("incrhr_text").value = strIncrHr
+	document.getElementByID("incrmn_text").value = strIncrMn
+    document.getElementByID("retention_text").value = strRetention
+	document.getElementByID("target_text").value = strTarget
+End Sub
+
+Sub WriteVidCap
+	Set objFile = objFSO.CreateTextFile(sFile)
+	objFile.Close
+	Set objFile = objFSO.OpenTextFile(sFile, ForWriting)
+	For i = 0 To UBound(arrSettings)
+		objFile.Write arrSettings(i) & ","
+	Next
+	objFile.Close
+End Sub
+
+Sub InitVidCap
+	Dim i, j
+    If objFSO.FileExists(sFile) Then
+		ReadVidCap
+        SetSourceVidCap
+		Info.InnerHTML = "Ready."
+	Else
+		' Source Name, Source IP, Source Port, Start Hr, Start Min, Stop Hr, Stop Min, Increment Hr, Increment Min, Retention, Target
+		arrSettings = Array("None","127.0.0.1",4444,07,30,16,30,00,15,10,"None")
+        WriteVidCap
+        ReadVidCap
+		Info.InnerHTML = "Configuration file not found... Created."
+	End If
+    DeleteOldVidCap
+    timeDeleteVidCap = window.setInterval("DeleteOldVidCap", 86400000)
+End Sub
+
+Sub SettingsVidCap
+    main.style.display="none"
+    settings.style.display="block"
+End Sub
+
+Sub MainVidCap
+    settings.style.display="none"
+    main.style.display="block"
+End Sub
+
+Sub ExitVidCap
+    StopVidCap
+    window.clearInterval(timeDeleteVidCap)
+    self.close()
+End Sub
+
+Sub StartVidCap
+  DIM strComputer,strProcess
+
+  strComputer = "." ' local computer
+  strProcess = "vlc.exe"
+
+  ' Check if VLC is running on specified computer (. = local computer)
+  If isProcessRunning(strComputer,strProcess) And boundaryVidCap = 1 Then
+    Info.InnerHTML = "<span class=""red"">Recording.</span> (Already Recording.)"
+  Else
+    timeRunVidCap = window.setInterval("RunVidCap", 1000)
+  End If
+End Sub
+
+Sub RunVidCap
+  strStartTimer = FormatNumber(GetTimer(strStartHr,strStartMn),0,,,0)
+  strEndTimer = FormatNumber(GetTimer(strStopHr,strStopMn),0,,,0)
+  strTimer = FormatNumber(Timer(),0,,,0)
+  boundaryVidCap = Boundary()
+  Dim strComputer,strProcess
+
+  strComputer = "." ' local computer
+  strProcess = "vlc.exe"
+
+  ' Check if VLC is running on specified computer (. = local computer)
+  If isProcessRunning(strComputer,strProcess) And boundaryVidCap = 1 Then
+    Info.InnerHTML = "<span class=""red"">Recording.</span>"
+  ElseIf boundaryVidCap = 0 Then
+    window.clearInterval(timeExecuteVidCap)
+    EndProc
+    Info.InnerHTML = "<span class=""green"">Recording Paused.</span>"
+  Else
+    ExecuteVidCap
+    timeExecuteVidCap = window.setInterval("ExecuteVidCap", getIncrTimer(strIncrHr,strIncrMn))
+    Info.InnerHTML = "<span class=""red"">Recording.</span>"
+  End If
+End Sub
+
+Sub ExecuteVidCap
+    EndProc
+    strDate = GetDate(Now, "")
+    strTime = GetTime()
+
+    strTemp = """C:\Program Files\VideoLAN\VLC\vlc"" -vvv udp://@" & strSourceIP & ":" & strSourcePort & " --sout file/ps:""" & strTarget & "\" & strSourceName & "-"
+    strPath = strTemp & strDate & "-" & strTime & ".mpg"""
+
+    Set objShell = CreateObject("Wscript.Shell")
+    objShell.Run strPath
+End Sub
+
+Sub StopVidCap
+    window.clearInterval(timeRunVidCap)
+    window.clearInterval(timeExecuteVidCap)
+    EndProc
+    Info.InnerHTML = "<span class=""blue"">Recording Stopped</span>"
+End Sub
+
+Sub EndProc
+    Const strComputer = "."
+    Dim objWMIService, colProcessList
+    Set objWMIService = GetObject("winmgmts:" & "{impersonationLevel=impersonate}!\\" & strComputer & "\root\cimv2")
+    Set colProcessList = objWMIService.ExecQuery("SELECT * FROM Win32_Process WHERE Name = 'vlc.exe'")
+    For Each objProcess in colProcessList
+      objProcess.Terminate()
+    Next
+End Sub
+
+Sub ApplyVidCap
+	strSourceName = document.getElementByID("sourcenm_text").value
+    strSourceIP = document.getElementByID("sourceip_text").value
+    strSourcePort = document.getElementByID("sourcept_text").value
+	strStartHr = document.getElementByID("starthr_text").value
+	strStartMn = document.getElementByID("startmn_text").value
+	strStopHr = document.getElementByID("stophr_text").value
+	strStopMn = document.getElementByID("stopmn_text").value
+	strIncrHr = document.getElementByID("incrhr_text").value
+	strIncrMn = document.getElementByID("incrmn_text").value
+    strRetention = document.getElementByID("retention_text").value
+	strTarget = document.getElementByID("target_text").value
+	arrSettings = Array(strSourceName,strSourceIP,strSourcePort,strStartHr,strStartMn,strStopHr,strStopMn,strIncrHr,strIncrMn,strRetention,strTarget)
+    ApplyVarVidCap
+	WriteVidCap
+    SetSourceVidCap
+	
+    Info.InnerHTML = "Configuration applied."
+End Sub
+
+Sub SetSourceVidCap
+    source.InnerHTML = strSourceName
+End Sub
+
+' -FUNCTIONS-
+Function GetIncrTimer(valHour,valMinute)
+    timerHour = ((valHour)*60)*60
+    timerMinute = (valMinute)*60
+    GetIncrTimer = (timerHour + timerMinute)*1000
+End Function
+
+
+Function GetDirectory()
+	Set objShell = CreateObject("WScript.Shell")
+	strFolder = objShell.CurrentDirectory
+	GetDirectory = strFolder
+End Function
+
+Function Boundary()
+    If strTimer < strStartTimer Or strTimer > strEndTimer Then
+      boundaryVidCap = 0
+    Else
+      boundaryVidCap = 1
+    End If
+
+    Boundary = boundaryVidCap
+End Function
+
+Function isProcessRunning(byval strComputer,byval strProcessName)
+    Dim objWMIService, strWMIQuery
+
+    strWMIQuery = "Select * from Win32_Process where name like '" & strProcessName & "'"
+
+    Set objWMIService = GetObject("winmgmts:" _
+      & "{impersonationLevel=impersonate}!\\" _ 
+        & strComputer & "\root\cimv2") 
+
+    if objWMIService.ExecQuery(strWMIQuery).Count > 0 then
+      isProcessRunning = true
+    else
+      isProcessRunning = false
+    end if
+End Function
+
+Function GetTimer(valHour, valMinute)
+  timerHour = ((valHour)*60)*60
+  timerMinute = (valMinute)*60
+  GetTimer = timerHour + timerMinute
+End Function
+
+Function GetDate(dateVal, delimiter)
+	'To comply with Option Explict
+	Dim dateMonth, dateDay
+	
+	dateVal = CDate(dateVal) 
+		' Converts the dateVal parameter to a date.
+		' This will cause an error and cause the function 
+		' to exit if the value passed is not a real date.
+		
+	delimiter = CStr(delimiter)
+		' Converts the delimiter parameter, which designates
+		' the delimiting character between the datepart values
+		' to a string value.  If you don't want a delimiting 
+		' character, (such as / or -) then you'd simply pass
+		' in an empty string for this parameter. 
+		
+	
+	dateMonth = Month(dateVal)
+ 	dateDay   = Day(dateVal)
+	
+	GetDate = CStr(Year(dateVal)) & delimiter
+	
+	If dateMonth < 10 Then
+		GetDate = GetDate & "0" 
+	End If
+	
+	GetDate = GetDate & CStr(dateMonth) & delimiter
+
+	If dateDay < 10 Then
+		GetDate = GetDate & "0"
+	End If
+	
+	GetDate = GetDate & CStr(dateDay)
+End Function
+
+Function GetTime()
+	'To comply with Option Explict
+	Dim timeHour, timeMinute, valHour, valMinute
+        timeHour = Hour(Now)
+        timeMinute = Minute(Now)
+        valHour = timeHour
+        valMinute = timeMinute
+
+	If valHour < 10 Then
+		timeHour = "0" & valHour
+	End If
+		
+	If valMinute < 10 Then
+		timeMinute = "0" & valMinute
+	End If
+	
+	GetTime = timeHour & timeMinute
+End Function
+</script>
+
+<body>
+
+<h2>VLC Automatic Video Capture</h2>
+
+<span>Current source is <span id="source">None.</span></span>
+<br />
+
+<span id="main" class="main">
+<input class="button" type="button" value="Start" name="start_button"  onClick="StartVidCap">
+<br />
+<input class="button" type="button" value="Stop" name="stop_button"  onClick="StopVidCap">
+<br />
+<input class="button" type="button" value="Settings" name="setup_button"  onClick="SettingsVidCap">
+<br />
+<input class="button" type="button" value="Exit" name="exit_button"  onClick="ExitVidCap">
+</span>
+
+<span id="settings" class="settings">
+	Source Name:<br />
+	<input type="text" class="text_med" id="sourcenm_text"><br />
+    Source IP:<span class="srcright">Source Port:</span><br />
+    <input type="text" class="text_med" id="sourceip_text"><input type="text" class="text_med srcright" id="sourcept_text"><br />
+	Start: (HH:MM)<br />
+	<input type="text" class="text_short" id="starthr_text">:<input type="text" class="text_short" id="startmn_text"><br />
+	Stop Time: (HH:MM)<br />
+	<input type="text" class="text_short" id="stophr_text">:<input type="text" class="text_short" id="stopmn_text"><br />
+	Increments (HH:MM):<br />
+	<input type="text" class="text_short" id="incrhr_text">:<input type="text" class="text_short" id="incrmn_text"><br />
+    Retention (Days):<br />
+	<input type="text" class="text_short" id="retention_text"><br />
+	Target Folder: (C:\Videos)
+    <br />
+    <span class="note">*NOTE: All ".mpg" files in this directory older than Retention will be deleted!</span><br />
+	<input type="text" class="text_long" id="target_text"><br />
+	<br />
+	<input class="button" type="button" value="Apply" name="apply_button"  onClick="ApplyVidCap">  <input class="button" type="button" value="Main" name="setup_button"  onClick="MainVidCap">
+</span>
+
+<span id="Info" class="info"></span>
+
+<p>
+*Requires VLC software installed on system.
+</p>
+</body>
